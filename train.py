@@ -169,7 +169,7 @@ if __name__ == "__main__":
         valid_loss.append(val_epoch_loss)
         valid_acc.append(val_metrics["accuracy"])
         valid_f1.append(val_metrics["f1"])
-        print('-'*50)
+        print('-'*150)
 
         ## train
     
