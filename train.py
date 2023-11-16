@@ -10,7 +10,9 @@ from model import build_model
 from load_dataset import get_datasets
 
 from sklearn.metrics import f1_score, accuracy_score, recall_score, precision_score
-BATCH_SIZE = 8
+from utils import save_plots, save_model
+
+BATCH_SIZE = 16
 
 def compute_metrics(y_true, predictions):
     f1 = f1_score(y_true, predictions, average="macro")
@@ -26,8 +28,11 @@ def train_step(model, train_loader, optimizer, criterion):
     train_loss = 0.0
     all_true_labels = []
     all_preds_labels = []
-    progress_bar = tqdm(train_loader, total= len(train_loader))
-    for data in progress_bar:
+    progress_bar = tqdm(enumerate(train_loader), total= len(train_loader), desc="Training")
+    
+    epoch_loss = 0
+    train_metrics = {}
+    for i ,data in progress_bar:
         #counter += 1
         images, labels = data
         images = images.to(device)
@@ -43,18 +48,26 @@ def train_step(model, train_loader, optimizer, criterion):
         # Calcular accuracy
         preds = torch.argmax(outputs,dim=1)
         
-        progress_bar.set_postfix({"loss": loss.item()})
+       
 
         all_preds_labels.extend(preds.detach().cpu().numpy())
         all_true_labels.extend(labels.detach().cpu().numpy())
         #_, preds = torch.max(outputs.data, 1)
+
+      
+        if i + 1 < len(train_loader):
+            progress_bar.set_postfix({"loss": loss.item()})
+        else:
+            epoch_loss = train_loss / len(train_loader)
+            train_metrics = compute_metrics(all_true_labels, all_preds_labels)
+
+            progress_bar.set_postfix({  "loss": train_loss / len(train_loader),
+                                        "train_accuracy": train_metrics["accuracy"],
+                                        "train_f1_score":  train_metrics["f1"],
+                                         })
+           
         loss.backward()
         optimizer.step()
-    ## Loss 
-    epoch_loss = train_loss / len(train_loader)
-
-    train_metrics = compute_metrics(all_true_labels, all_preds_labels)
-
 
     return epoch_loss, train_metrics, progress_bar
 
@@ -64,7 +77,10 @@ def validation_step(model, val_loader, criterion):
     val_loss = 0.0
     all_true_labels = []
     all_preds_labels = []
-    for data in tqdm(val_loader, total= len(val_loader)):
+    progress_bar = tqdm(enumerate(val_loader), total= len(val_loader), desc="Validation")
+    epoch_loss = 0
+    val_metrics = {}
+    for i , data in progress_bar:
         #counter += 1
         images, labels = data
         images = images.to(device)
@@ -77,20 +93,29 @@ def validation_step(model, val_loader, criterion):
         loss =  criterion(outputs, labels)
 
         val_loss += loss.item()
+
         # Calcular accuracy
         preds = torch.argmax(outputs,dim=1)
         
         all_preds_labels.extend(preds.detach().cpu().numpy())
         all_true_labels.extend(labels.detach().cpu().numpy())
-        #_, preds = torch.max(outputs.data, 1)
-    ## Loss 
-    epoch_loss = train_loss / len(train_loader)
-    val_metrics = compute_metrics(all_true_labels, all_preds_labels)
 
+        if i + 1 < len(val_loader):
+            progress_bar.set_postfix({"val_loss": loss.item()})
+        else:
+            epoch_loss = val_loss / len(val_loader)
+            val_metrics = compute_metrics(all_true_labels, all_preds_labels)
+
+            progress_bar.set_postfix({ "val_loss": epoch_loss,
+                                       "val_accuracy": val_metrics["accuracy"],
+                                    "val_f1_score":  val_metrics["f1"],
+                                            })
+        
+        #_, preds = torch.max(outputs.data, 1)
     return epoch_loss, val_metrics
 
 if __name__ == "__main__":
-    epochs = 5
+    epochs = 20
     dataset_train, dataset_test, classes = get_datasets(pretrained=True)
 
 
@@ -126,6 +151,8 @@ if __name__ == "__main__":
 
     train_loss, valid_loss = [], []
     train_acc, valid_acc = [], []
+
+    train_f1, valid_f1 = [], []
     
     #train_loss = 0
 
@@ -133,26 +160,22 @@ if __name__ == "__main__":
 
     for epoch in range(epochs):
         print(f"[INFO]: Epoca {epoch+1} de {epochs}")
-        train_loss, train_metrics, progress_bar = train_step(model, train_loader, optimizer, criterion)
-        print("train_loss:", train_loss)
-        print("train_metrics:", train_metrics)
-
-        val_loss, val_metrics = validation_step(model, valid_loader, criterion)
-
-        progress_bar.set_postfix({"loss": train_loss, 
-                                  "train_accuracy": train_metrics["accuracy"],
-                                  "train_f1_score":  train_metrics["f1"],
-                                  "val_loss": val_loss, 
-                                  "val_accuracy": val_metrics["accuracy"],
-                                  "val_f1_score": val_metrics["f1"],
-                                 })
-        print("val_loss:", val_loss)
-        print("val_metrics:", val_metrics)
-        
-        break
+        train_epoch_loss, train_metrics, progress_bar = train_step(model, train_loader, optimizer, criterion)
+      
+        val_epoch_loss, val_metrics = validation_step(model, valid_loader, criterion)
+        train_loss.append(train_epoch_loss)
+        train_acc.append(train_metrics["accuracy"])
+        train_f1.append(train_metrics["f1"])
+        valid_loss.append(val_epoch_loss)
+        valid_acc.append(val_metrics["accuracy"])
+        valid_f1.append(val_metrics["f1"])
+        print('-'*50)
 
         ## train
-        
+    
+    save_plots(train_acc, valid_acc, train_loss, valid_loss, train_f1, valid_f1)
+
+    save_model(epochs, model, optimizer, criterion, model_name = "efficientnet_b0")
 
 
         

@@ -2,9 +2,9 @@ import torch
 
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, Subset
+import os
 
-
-ROOT_DATA = "./data"
+ROOT_DATA = "C:/Users/ileon/Documents/Anthony/leaf_pests_identification/data"
 TEST_SIZE = 0.25
 IMAGE_SIZE = 224
 NUM_WORKERS = 4
